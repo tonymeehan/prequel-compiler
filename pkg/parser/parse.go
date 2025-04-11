@@ -16,7 +16,7 @@ type ParseRuleMetadataT struct {
 	Name    string `yaml:"name,omitempty" json:"name,omitempty"`
 	Id      string `yaml:"id,omitempty" json:"id,omitempty"`
 	Hash    string `yaml:"hash,omitempty" json:"hash,omitempty"`
-	Gen     uint   `yaml:"generation,omitempty" json:"generation,omitempty"`
+	Gen     uint   `yaml:"generation" json:"generation"`
 	Kind    string `yaml:"kind,omitempty" json:"kind,omitempty"`
 	Version string `yaml:"version,omitempty" json:"version,omitempty"`
 }
@@ -46,7 +46,7 @@ const (
 
 type ParseCreT struct {
 	Id           string              `yaml:"id,omitempty" json:"id,omitempty"`
-	Severity     uint                `yaml:"severity,omitempty" json:"severity,omitempty"`
+	Severity     uint                `yaml:"severity" json:"severity"`
 	Title        string              `yaml:"title,omitempty" json:"title,omitempty"`
 	Category     string              `yaml:"category,omitempty" json:"category,omitempty"`
 	Tags         []string            `yaml:"tags,omitempty" json:"tags,omitempty"`
