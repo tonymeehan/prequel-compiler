@@ -3,7 +3,9 @@ package ast
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/prequel-dev/prequel-compiler/pkg/parser"
@@ -417,40 +419,34 @@ func BuildTree(tree *parser.TreeT) (*AstT, error) {
 	return ast, nil
 }
 
-func traverseTree(node *AstNodeT, f *os.File, indent string) error {
+func traverseTree(node *AstNodeT, wr io.Writer, depth int) error {
 
 	var (
-		parent string
-		child  string
-		err    error
+		obj string
+		err error
 	)
 
 	switch o := node.Object.(type) {
 	case *AstSeqMatcherT:
-		parent = fmt.Sprintf("%s.%d.%d w=%s pos_terms=%d neg_terms=%d scope=%s", node.Metadata.Type, node.Metadata.Depth, node.Metadata.MatchId, o.Window, len(o.Order), len(o.Negate), node.Metadata.Scope)
+		obj = fmt.Sprintf("%s.%d.%d.%d w=%s pos_terms=%d neg_terms=%d scope=%s", node.Metadata.Type, node.Metadata.Depth, node.Metadata.MatchId, node.Metadata.ParentMatchId, o.Window, len(o.Order), len(o.Negate), node.Metadata.Scope)
 	case *AstSetMatcherT:
-		parent = fmt.Sprintf("%s.%d.%d w=%s pos_terms=%d neg_terms=%d scope=%s", node.Metadata.Type, node.Metadata.Depth, node.Metadata.MatchId, o.Window, len(o.Match), len(o.Negate), node.Metadata.Scope)
+		obj = fmt.Sprintf("%s.%d.%d.%d w=%s pos_terms=%d neg_terms=%d scope=%s", node.Metadata.Type, node.Metadata.Depth, node.Metadata.MatchId, node.Metadata.ParentMatchId, o.Window, len(o.Match), len(o.Negate), node.Metadata.Scope)
+	case *AstLogMatcherT:
+		obj = fmt.Sprintf("%s.%d.%d.%d w=%s pos_terms=%d neg_terms=%d scope=%s", node.Metadata.Type, node.Metadata.Depth, node.Metadata.MatchId, node.Metadata.ParentMatchId, o.Window, len(o.Match), len(o.Negate), node.Metadata.Scope)
+	case *AstDescriptorT:
+		obj = fmt.Sprintf("%s.%d.%d.%d scope=%s", node.Metadata.Type, node.Metadata.Depth, node.Metadata.MatchId, node.Metadata.ParentMatchId, node.Metadata.Scope)
+	default:
+		return fmt.Errorf("unknown object type: %T", o)
 	}
 
-	if _, err = f.Write([]byte(fmt.Sprintf("%s%s\n", indent, parent))); err != nil {
+	indent := strings.Repeat("  ", depth)
+
+	if _, err = wr.Write([]byte(fmt.Sprintf("%d: %s%s\n", depth, indent, obj))); err != nil {
 		return err
 	}
 
-	indent += "  "
-
 	for _, c := range node.Children {
-		switch o := c.Object.(type) {
-		case *AstLogMatcherT:
-			child = fmt.Sprintf("%s.%d.%d w=%s pos_terms=%d neg_terms=%d scope=%s", c.Metadata.Type, c.Metadata.Depth, c.Metadata.MatchId, o.Window, len(o.Match), len(o.Negate), c.Metadata.Scope)
-		case *AstDescriptorT:
-			child = fmt.Sprintf("%s.%d.%d scope=%s", c.Metadata.Type, c.Metadata.Depth, c.Metadata.MatchId, c.Metadata.Scope)
-		}
-
-		if _, err = f.Write([]byte(fmt.Sprintf("%s%s\n", indent, child))); err != nil {
-			return err
-		}
-
-		if err = traverseTree(c, f, indent+"  "); err != nil {
+		if err = traverseTree(c, wr, depth+1); err != nil {
 			return err
 		}
 	}
@@ -469,7 +465,7 @@ func DrawTree(tree *AstT, path string) error {
 	}
 
 	for _, node := range tree.Nodes {
-		if err = traverseTree(node, f, ""); err != nil {
+		if err = traverseTree(node, f, 0); err != nil {
 			return err
 		}
 	}
