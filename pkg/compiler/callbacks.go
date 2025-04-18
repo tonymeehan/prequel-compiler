@@ -21,23 +21,14 @@ var (
 	ErrNotFound              = errors.New("not found")
 )
 
-type AssertParamsT struct {
-	Descriptor    *ast.AstDescriptorT
-	RuleId        string
-	RuleHash      string
-	MatchId       uint32
-	ParentMatchId uint32
-	Depth         int
-	Subject       string
+type MatchParamsT struct {
+	Address       *ast.AstNodeAddressT
+	ParentAddress *ast.AstNodeAddressT
+	Origin        bool
 }
 
-type MatchParamsT struct {
-	RuleId   string
-	RuleHash string
-	MatchId  uint32
-	Origin   bool
-	Subject  string
-	NodeType ast.AstNodeTypeT
+type AssertParamsT struct {
+	Address *ast.AstNodeAddressT
 }
 
 type CbMatchT func(ctx context.Context, m matchz.HitsT) error
@@ -46,6 +37,8 @@ type CbAssertT func(ctx context.Context) error
 type RuntimeI interface {
 	NewCbMatch(params MatchParamsT) CbMatchT
 	NewCbAssert(params AssertParamsT) CbAssertT
+	LoadAssertObject(ctx context.Context, obj *ObjT) error
+	LoadMachineObject(ctx context.Context, obj *ObjT, userCb any) error
 }
 
 func GetJqMatcher(obj *ObjT) (lm.MatchFunc, CbMatchT, error) {
@@ -140,4 +133,12 @@ func (f *NoopRuntime) NewCbAssert(params AssertParamsT) CbAssertT {
 	return func(ctx context.Context) error {
 		return nil
 	}
+}
+
+func (f *NoopRuntime) LoadAssertObject(ctx context.Context, obj *ObjT) error {
+	return nil
+}
+
+func (f *NoopRuntime) LoadMachineObject(ctx context.Context, obj *ObjT, userCb any) error {
+	return nil
 }
