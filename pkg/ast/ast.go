@@ -16,18 +16,16 @@ import (
 )
 
 const (
-	RootMatchId = uint32(0)
-	AstVersion  = 1
+	AstVersion = 1
 )
 
 var (
 	ErrInvalidEventType        = errors.New("invalid event type")
 	ErrInvalidNodeType         = errors.New("invalid node type")
-	ErrRootNodeWithoutEventSrc = errors.New("root node has no event src")
+	ErrRootNodeWithoutEventSrc = errors.New("root node has no event source")
 	ErrInvalidWindow           = errors.New("invalid window")
 	ErrMissingOrigin           = errors.New("missing origin event")
-	ErrInvalidAnchor           = errors.New("invalid anchor")
-	ErrInvalidMatchId          = errors.New("invalid match id")
+	ErrInvalidAnchor           = errors.New("invalid negate anchor")
 	ErrNoTermIdx               = errors.New("no term idx")
 )
 
@@ -109,6 +107,7 @@ func Build(data []byte) (*AstT, error) {
 	)
 
 	if parseTree, err = parser.Parse(data); err != nil {
+		log.Error().Any("err", err).Msg("Parser failed")
 		return nil, err
 	}
 
@@ -138,8 +137,7 @@ func BuildTree(tree *parser.TreeT) (*AstT, error) {
 		}
 
 		if !rb.HasOrigin {
-			log.Error().Any("rule", rule).Msg("Rule has no origin event")
-			return nil, ErrMissingOrigin
+			return nil, parserNode.WrapError(ErrMissingOrigin)
 		}
 
 		ast.Nodes = append(ast.Nodes, rule)
@@ -230,14 +228,14 @@ func (b *builderT) buildMatcherChildren(parserNode *parser.NodeT, machineAddress
 	)
 
 	if parserNode.Metadata.Event == nil {
-		return nil, ErrRootNodeWithoutEventSrc
+		return nil, parserNode.WrapError(ErrRootNodeWithoutEventSrc)
 	}
 
 	if parserNode.Metadata.Event.Source == "" {
 		log.Error().
 			Any("address", machineAddress).
 			Msg("Event missing source")
-		return nil, ErrInvalidEventType
+		return nil, parserNode.WrapError(ErrInvalidEventType)
 	}
 
 	// Implied that the root node has an origin event
@@ -264,10 +262,7 @@ func (b *builderT) buildMatcherNodes(parserNode *parser.NodeT, machineAddress *A
 	case schema.NodeTypeLogSeq:
 	case schema.NodeTypeLogSet:
 	default:
-		log.Error().
-			Any("address", machineAddress).
-			Msg("Invalid node type")
-		return nil, ErrInvalidNodeType
+		return nil, parserNode.WrapError(ErrInvalidNodeType)
 	}
 
 	// We currently only support building log matchers in this package
@@ -291,9 +286,7 @@ func (b *builderT) buildMachineChildren(parserNode *parser.NodeT, machineAddress
 		)
 
 		if parserChildNode, ok = child.(*parser.NodeT); !ok {
-			log.Error().
-				Msg("Invalid child type")
-			return nil, ErrInvalidNodeType
+			return nil, parserNode.WrapError(ErrInvalidNodeType)
 		}
 
 		if parserChildNode.Metadata.NegateOpts != nil {
@@ -302,7 +295,7 @@ func (b *builderT) buildMachineChildren(parserNode *parser.NodeT, machineAddress
 			if negateOpts.Anchor > uint32(len(parserNode.Children)) {
 				log.Error().
 					Msg("Negate anchor is greater than the number of children")
-				return nil, ErrInvalidAnchor
+				return nil, parserNode.WrapError(ErrInvalidAnchor)
 			}
 		}
 
@@ -332,7 +325,7 @@ func (b *builderT) buildMachineChildren(parserNode *parser.NodeT, machineAddress
 			log.Error().
 				Any("address", machineAddress).
 				Msg("Event missing source")
-			return nil, ErrInvalidEventType
+			return nil, parserChildNode.WrapError(ErrInvalidEventType)
 		}
 
 		err = b.descendTree(func() error {
@@ -373,7 +366,7 @@ func (b *builderT) buildStateMachine(parserNode *parser.NodeT, parentMachineAddr
 			log.Error().
 				Any("address", machineAddress).
 				Msg("Window is required for sequences")
-			return nil, ErrInvalidWindow
+			return nil, parserNode.WrapError(ErrInvalidWindow)
 		}
 	case schema.NodeTypeSet, schema.NodeTypeLogSet:
 	default:
@@ -381,7 +374,7 @@ func (b *builderT) buildStateMachine(parserNode *parser.NodeT, parentMachineAddr
 			Any("address", machineAddress).
 			Str("type", parserNode.Metadata.Type.String()).
 			Msg("Invalid node type")
-		return nil, ErrInvalidNodeType
+		return nil, parserNode.WrapError(ErrInvalidNodeType)
 	}
 
 	return b.buildMachineNode(parserNode, parentMachineAddress, machineAddress, children)

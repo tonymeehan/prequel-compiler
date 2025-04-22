@@ -2,7 +2,6 @@ package ast
 
 import (
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/prequel-dev/prequel-compiler/pkg/parser"
@@ -12,12 +11,8 @@ import (
 )
 
 var (
-	ErrUnknownField                  = errors.New("unknown source field")
-	ErrUnknownSrc                    = errors.New("unknown source")
-	ErrSeqPosConditions              = errors.New("sequences require two or more positive conditions")
-	ErrMissingScalar                 = errors.New("missing string, jq, or regex condition")
-	ErrMissingPositiveOrderCondition = errors.New("missing one or more positive condition under an order statement")
-	ErrMissingPositiveMatchCondition = errors.New("missing one or more positive condition under a match statement")
+	ErrSeqPosConditions = errors.New("sequences require two or more positive conditions")
+	ErrMissingScalar    = errors.New("missing string, jq, or regex condition")
 )
 
 type AstLogMatcherT struct {
@@ -27,49 +22,43 @@ type AstLogMatcherT struct {
 	Window time.Duration
 }
 
-func validateLogSeq(n *parser.NodeT, matches, negates int) error {
+func validateLogSeq(n *parser.NodeT, matches int) error {
 
 	if matches <= 1 {
 		log.Error().
 			Any("node", n).
-			Msg("Window requires two or more positive conditions")
-		return ErrSeqPosConditions
+			Msg("Sequences require two or more positive conditions")
+		return n.WrapError(ErrSeqPosConditions)
 	}
 
 	if n.Metadata.Window == 0 {
 		log.Error().
 			Any("node", n).
 			Msg("Sequence requires a window")
-		return ErrInvalidWindow
-	}
-
-	if matches == 0 {
-		log.Error().
-			Int("matches", matches).
-			Int("negate", negates).
-			Interface("node", n).
-			Msg("Sequences require at least one order term")
-		return ErrMissingPositiveOrderCondition
+		return n.WrapError(ErrInvalidWindow)
 	}
 
 	return nil
 }
 
-func validateLogSet(n *parser.NodeT, matches, negates int) error {
+func validateLogSet(n *parser.NodeT, matches int) error {
 
+	// Only one positive condition with a window is not allowed
+	if matches == 1 && n.Metadata.Window != 0 {
+		log.Error().
+			Any("node", n).
+			Msg("Windows require two or more positive conditions")
+		return n.WrapError(ErrInvalidWindow)
+	}
+
+	// More than one positive condition with no window is not allowed
 	if matches > 1 && n.Metadata.Window == 0 {
 		log.Error().
 			Any("node", n).
 			Msg("Window requires two or more positive conditions")
-		return ErrInvalidWindow
+		return n.WrapError(ErrInvalidWindow)
 	}
 
-	if negates > 0 && matches == 0 {
-		log.Error().
-			Any("node", n).
-			Msg("Sets require one or more positive conditions under a match statement")
-		return ErrMissingPositiveMatchCondition
-	}
 	return nil
 }
 
@@ -86,30 +75,29 @@ func (b *builderT) buildLogMatcherNode(parserNode *parser.NodeT, machineAddress 
 		var (
 			match *parser.MatcherT
 			term  AstFieldT
-			src   = parserNode.Metadata.Event.Source
 			ok    bool
 		)
 
 		// Children are expected to be scalar matcher values
 		if match, ok = child.(*parser.MatcherT); !ok {
 			zlog.Error().Msg("Expected scalar value")
-			return nil, ErrMissingScalar
+			return nil, parserNode.WrapError(ErrMissingScalar)
 		}
 
 		// Count match fields and remember values
 		for _, field := range match.Match.Fields {
 			if field.Count > 1 {
 				for i := 0; i < field.Count; i++ {
-					if term, err = newMatchTerm(src, field); err != nil {
+					if term, err = newMatchTerm(field); err != nil {
 						zlog.Error().Err(err).Msg("Invalid match field term")
-						return nil, err
+						return nil, parserNode.WrapError(err)
 					}
 					matchFields = append(matchFields, term)
 				}
 			} else {
-				if term, err = newMatchTerm(src, field); err != nil {
+				if term, err = newMatchTerm(field); err != nil {
 					zlog.Error().Err(err).Msg("Invalid match field term")
-					return nil, err
+					return nil, parserNode.WrapError(err)
 				}
 				matchFields = append(matchFields, term)
 			}
@@ -119,16 +107,16 @@ func (b *builderT) buildLogMatcherNode(parserNode *parser.NodeT, machineAddress 
 		for _, field := range match.Negate.Fields {
 			if field.Count > 1 {
 				for range field.Count {
-					if term, err = newNegateTerm(src, field); err != nil {
+					if term, err = newNegateTerm(field, uint32(len(match.Negate.Fields))); err != nil {
 						zlog.Error().Err(err).Msg("Invalid negate field term")
-						return nil, err
+						return nil, parserNode.WrapError(err)
 					}
 					negateFields = append(negateFields, term)
 				}
 			} else {
-				if term, err = newNegateTerm(src, field); err != nil {
+				if term, err = newNegateTerm(field, uint32(len(match.Negate.Fields))); err != nil {
 					zlog.Error().Err(err).Msg("Invalid negate field term")
-					return nil, err
+					return nil, parserNode.WrapError(err)
 				}
 				negateFields = append(negateFields, term)
 			}
@@ -137,18 +125,18 @@ func (b *builderT) buildLogMatcherNode(parserNode *parser.NodeT, machineAddress 
 
 	switch parserNode.Metadata.Type {
 	case schema.NodeTypeLogSet:
-		if err = validateLogSet(parserNode, len(matchFields), len(negateFields)); err != nil {
+		if err = validateLogSet(parserNode, len(matchFields)); err != nil {
 			return nil, err
 		}
 	case schema.NodeTypeLogSeq:
-		if err = validateLogSeq(parserNode, len(matchFields), len(negateFields)); err != nil {
+		if err = validateLogSeq(parserNode, len(matchFields)); err != nil {
 			return nil, err
 		}
 	default:
 		log.Error().
 			Any("type", parserNode.Metadata.Type.String()).
 			Msg("Invalid node type")
-		return nil, ErrInvalidNodeType
+		return nil, parserNode.WrapError(ErrInvalidNodeType)
 	}
 
 	return b.doBuildLogMatcherNode(parserNode, machineAddress, termIdx, matchFields, negateFields)
@@ -181,51 +169,11 @@ func (b *builderT) doBuildLogMatcherNode(parserNode *parser.NodeT, machineAddres
 	return matchNode, nil
 }
 
-func knownSrcField(src string, field parser.FieldT) (AstFieldT, error) {
-	var (
-		t = AstFieldT{
-			Field: field.Field,
-		}
-		f, v string
-	)
-
-	switch src {
-	case schema.EventTypeK8s:
-		switch field.Field {
-		case schema.FieldK8sEventReason:
-			f = schema.FieldK8sEventReason
-			v = field.StrValue
-		case schema.FieldK8sEventType:
-			f = schema.FieldK8sEventType
-			v = field.StrValue
-		case schema.FieldK8sEventReasonDetail:
-			f = schema.FieldK8sEventReasonDetail
-			v = field.StrValue
-		default:
-			return AstFieldT{}, ErrUnknownField
-		}
-	default:
-		return AstFieldT{}, ErrUnknownSrc
-	}
-
-	t.TermValue = match.TermT{
-		Type:  match.TermJqJson,
-		Value: fmt.Sprintf("select(.%s == \"%s\")", f, v),
-	}
-
-	return t, nil
-}
-
-func newMatchTerm(src string, field parser.FieldT) (AstFieldT, error) {
+func newMatchTerm(field parser.FieldT) (AstFieldT, error) {
 	var (
 		t     AstFieldT
 		count = 0
-		err   error
 	)
-
-	if t, err = knownSrcField(src, field); err == nil {
-		return t, nil
-	}
 
 	t = AstFieldT{
 		Field: field.Field,
@@ -261,18 +209,23 @@ func newMatchTerm(src string, field parser.FieldT) (AstFieldT, error) {
 	return t, nil
 }
 
-func newNegateTerm(src string, field parser.FieldT) (AstFieldT, error) {
+func newNegateTerm(field parser.FieldT, anchors uint32) (AstFieldT, error) {
 
 	var (
 		t   AstFieldT
 		err error
 	)
 
-	if t, err = newMatchTerm(src, field); err != nil {
+	if t, err = newMatchTerm(field); err != nil {
 		return AstFieldT{}, err
 	}
 
 	if field.NegateOpts != nil {
+
+		if field.NegateOpts.Anchor > anchors {
+			return AstFieldT{}, ErrInvalidAnchor
+		}
+
 		t.NegateOpts = &AstNegateOptsT{
 			Window:   field.NegateOpts.Window,
 			Slide:    field.NegateOpts.Slide,
