@@ -31,8 +31,8 @@ var (
 )
 
 var (
-	validCreIdRegex    = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
-	validBase58IdRegex = regexp.MustCompile(`^[1-9A-HJ-NP-Za-km-z-]+$`)
+	validCreIdRegex    = regexp.MustCompile(`^[A-Za-z0-9-]{4,}$`)
+	validBase58IdRegex = regexp.MustCompile(`^[1-9A-Za-z]{12,}$`)
 )
 
 type TreeT struct {
