@@ -1,9 +1,12 @@
 rules:
   - cre:
       id: bad-seq-one-negate-condition
+    metadata:
+      id: eeJwJiWQa9TyH3qTYYSZM9
+      hash: 9GJSdx4smGJeJCdiw6tiK5
     rule:
       sequence:
         event:
-          source: kafka
+          source: cre.log.kafka
         negate:
           - regex: "foo(.+)bar" # one negate condition not allowed
