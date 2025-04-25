@@ -142,18 +142,10 @@ func (b *builderT) buildLogMatcherNode(parserNode *parser.NodeT, machineAddress 
 	return b.doBuildLogMatcherNode(parserNode, machineAddress, termIdx, matchFields, negateFields)
 }
 
-// TODO: remove this once we migrate scope to data sources
-func getLogMatchScope(parserNode *parser.NodeT) string {
-	if parserNode.Metadata.Event.Source == schema.EventTypeK8s {
-		return schema.ScopeCluster
-	}
-	return schema.ScopeNode
-}
-
 func (b *builderT) doBuildLogMatcherNode(parserNode *parser.NodeT, machineAddress *AstNodeAddressT, termIdx *uint32, matchFields []AstFieldT, negateFields []AstFieldT) (*AstNodeT, error) {
 	var (
 		address   = b.newAstNodeAddress(parserNode.Metadata.RuleHash, parserNode.Metadata.Type.String(), termIdx)
-		matchNode = newAstNode(parserNode, parserNode.Metadata.Type, getLogMatchScope(parserNode), machineAddress, address)
+		matchNode = newAstNode(parserNode, parserNode.Metadata.Type, schema.ScopeNode, machineAddress, address)
 	)
 
 	matchNode.Object = &AstLogMatcherT{
