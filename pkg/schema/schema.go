@@ -10,7 +10,6 @@ const (
 
 const (
 	EventTypeLog = "log"
-	EventTypeK8s = "k8s"
 )
 
 type NodeTypeT string
