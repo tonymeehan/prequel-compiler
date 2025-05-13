@@ -1,0 +1,42 @@
+name: prequel-compiler build/test
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [trigger-workflow]
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    name: Build Go Project
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: [1.24.2]
+        os: [ubuntu-24.04]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Go ${{ matrix.go-version }}
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Verify Go Version
+        run: go version
+
+      - name: Run prequel-compiler tests
+        run: |
+          pushd pkg/parser
+          go test
+          popd
+          pushd pkg/ast
+          go test
+          popd
