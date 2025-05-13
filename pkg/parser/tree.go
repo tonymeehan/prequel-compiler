@@ -736,7 +736,28 @@ func (n *NodeT) WrapError(err error) error {
 		n.Metadata.CreId, err)
 }
 
-func Read(rdr io.Reader) (*RulesT, error) {
+type ReadOptT func(*readOptsT)
+
+func WithDedupe() func(*readOptsT) {
+	return func(o *readOptsT) {
+		o.dedupe = true
+	}
+}
+
+type readOptsT struct {
+	dedupe bool
+}
+
+func readOpts(opts ...ReadOptT) *readOptsT {
+	o := &readOptsT{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	return o
+}
+
+func Read(rdr io.Reader, opts ...ReadOptT) (*RulesT, error) {
 	var (
 		allRules = &RulesT{
 			Rules:  make([]ParseRuleT, 0),
@@ -746,6 +767,7 @@ func Read(rdr io.Reader) (*RulesT, error) {
 		root    *yaml.Node
 		dupes   = make(map[string]struct{})
 		decoder *yaml.Decoder
+		o       = readOpts(opts...)
 		ok      bool
 	)
 
@@ -792,9 +814,10 @@ LOOP:
 				if err := vNode.Decode(&rules); err != nil {
 					return nil, err
 				}
-
-				if err := checkDuplicates(rules, dupes); err != nil {
-					return nil, err
+				if o.dedupe {
+					if err := checkDuplicates(rules, dupes); err != nil {
+						return nil, err
+					}
 				}
 				allRules.Rules = append(allRules.Rules, rules...)
 
