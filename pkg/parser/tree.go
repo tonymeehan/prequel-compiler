@@ -1,12 +1,14 @@
 package parser
 
 import (
+	"crypto/sha1"
 	"errors"
 	"fmt"
 	"io"
 	"regexp"
 	"time"
 
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/prequel-dev/prequel-compiler/pkg/pqerr"
 	"github.com/prequel-dev/prequel-compiler/pkg/schema"
 	"github.com/rs/zerolog/log"
@@ -614,7 +616,7 @@ func ParseCres(data []byte) (map[string]ParseCreT, error) {
 	return cres, nil
 }
 
-func Parse(data []byte) (*TreeT, error) {
+func Parse(data []byte, opts ...ParseOptT) (*TreeT, error) {
 
 	var (
 		config *RulesT
@@ -625,7 +627,7 @@ func Parse(data []byte) (*TreeT, error) {
 		return nil, err
 	}
 
-	return ParseRules(config)
+	return ParseRules(config, opts)
 }
 
 func Unmarshal(data []byte) (*RulesT, error) {
@@ -658,9 +660,15 @@ func Unmarshal(data []byte) (*RulesT, error) {
 	return &config, nil
 }
 
-func parseRules(rules []ParseRuleT, termsT map[string]ParseTermT, rulesRoot *yaml.Node, termsY map[string]*yaml.Node) (*TreeT, error) {
+func Hash(h string) string {
+	hash := sha1.Sum([]byte(h))
+	return base58.Encode(hash[:])
+}
+
+func parseRules(rules []ParseRuleT, termsT map[string]ParseTermT, rulesRoot *yaml.Node, termsY map[string]*yaml.Node, opts ...ParseOptT) (*TreeT, error) {
 
 	var (
+		o    = parseOpts(opts...)
 		tree = &TreeT{
 			Nodes: make([]*NodeT, 0),
 		}
@@ -681,6 +689,24 @@ func parseRules(rules []ParseRuleT, termsT map[string]ParseTermT, rulesRoot *yam
 			return nil, ErrRuleNotFound
 		}
 
+		if o.genIds {
+			if rule.Metadata.Id == "" {
+				rule.Metadata.Id = Hash(rule.Cre.Id)
+				log.Warn().
+					Str("rule.Metadata.Id", rule.Metadata.Id).
+					Str("rule.Cre.Id", rule.Cre.Id).
+					Msg("Rule id is empty, generating from cre id")
+			}
+			if rule.Metadata.Hash == "" {
+				rule.Metadata.Hash = Hash(rule.Cre.Id + rule.Metadata.Id)
+				log.Warn().
+					Str("rule.Cre.Id", rule.Cre.Id).
+					Str("rule.Metadata.Id", rule.Metadata.Id).
+					Str("rule.Metadata.Hash", rule.Metadata.Hash).
+					Msg("Rule hash is empty, generating from cre id and rule id")
+			}
+		}
+
 		if node, err = buildTree(termsT, rule, ruleNode, termsY); err != nil {
 			return nil, err
 		}
@@ -691,8 +717,8 @@ func parseRules(rules []ParseRuleT, termsT map[string]ParseTermT, rulesRoot *yam
 	return tree, nil
 }
 
-func ParseRules(config *RulesT) (*TreeT, error) {
-	return parseRules(config.Rules, config.TermsT, config.Root, config.TermsY)
+func ParseRules(config *RulesT, opts []ParseOptT) (*TreeT, error) {
+	return parseRules(config.Rules, config.TermsT, config.Root, config.TermsY, opts...)
 }
 
 func findChild(n *yaml.Node, key string) (*yaml.Node, bool) {
@@ -736,20 +762,27 @@ func (n *NodeT) WrapError(err error) error {
 		n.Metadata.CreId, err)
 }
 
-type ReadOptT func(*readOptsT)
+type ParseOptT func(*parseOptsT)
 
-func WithDedupe() func(*readOptsT) {
-	return func(o *readOptsT) {
+func WithDedupe() func(*parseOptsT) {
+	return func(o *parseOptsT) {
 		o.dedupe = true
 	}
 }
 
-type readOptsT struct {
-	dedupe bool
+func WithGenIds() func(*parseOptsT) {
+	return func(o *parseOptsT) {
+		o.genIds = true
+	}
 }
 
-func readOpts(opts ...ReadOptT) *readOptsT {
-	o := &readOptsT{}
+type parseOptsT struct {
+	dedupe bool
+	genIds bool
+}
+
+func parseOpts(opts ...ParseOptT) *parseOptsT {
+	o := &parseOptsT{}
 	for _, opt := range opts {
 		opt(o)
 	}
@@ -757,7 +790,7 @@ func readOpts(opts ...ReadOptT) *readOptsT {
 	return o
 }
 
-func Read(rdr io.Reader, opts ...ReadOptT) (*RulesT, error) {
+func Read(rdr io.Reader, opts ...ParseOptT) (*RulesT, error) {
 	var (
 		allRules = &RulesT{
 			Rules:  make([]ParseRuleT, 0),
@@ -767,7 +800,7 @@ func Read(rdr io.Reader, opts ...ReadOptT) (*RulesT, error) {
 		root    *yaml.Node
 		dupes   = make(map[string]struct{})
 		decoder *yaml.Decoder
-		o       = readOpts(opts...)
+		o       = parseOpts(opts...)
 		ok      bool
 	)
 
