@@ -764,12 +764,6 @@ func (n *NodeT) WrapError(err error) error {
 
 type ParseOptT func(*parseOptsT)
 
-func WithDedupe() func(*parseOptsT) {
-	return func(o *parseOptsT) {
-		o.dedupe = true
-	}
-}
-
 func WithGenIds() func(*parseOptsT) {
 	return func(o *parseOptsT) {
 		o.genIds = true
@@ -777,7 +771,6 @@ func WithGenIds() func(*parseOptsT) {
 }
 
 type parseOptsT struct {
-	dedupe bool
 	genIds bool
 }
 
@@ -847,7 +840,7 @@ LOOP:
 				if err := vNode.Decode(&rules); err != nil {
 					return nil, err
 				}
-				if o.dedupe {
+				if !o.genIds {
 					if err := checkDuplicates(rules, dupes); err != nil {
 						return nil, err
 					}
