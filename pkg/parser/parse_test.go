@@ -43,6 +43,8 @@ func gatherNodeNegativeIndexes(node any, out *[]int) {
 
 func TestParseSuccess(t *testing.T) {
 
+	var opts = []ParseOptT{WithGenIds()}
+
 	var tests = map[string]struct {
 		rule               string
 		expectedNodeTypes  []string
@@ -62,7 +64,7 @@ func TestParseSuccess(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			tree, err := Parse([]byte(test.rule))
+			tree, err := Parse([]byte(test.rule), opts...)
 			if err != nil {
 				t.Fatalf("Error parsing rule: %v", err)
 			}
@@ -90,6 +92,8 @@ func TestParseSuccess(t *testing.T) {
 
 func TestSuccessExamples(t *testing.T) {
 
+	var opts = []ParseOptT{WithGenIds()}
+
 	rules, err := filepath.Glob(filepath.Join("../testdata", "success_examples", "*.yaml"))
 	if err != nil {
 		t.Fatalf("Error finding CRE test files: %v", err)
@@ -103,7 +107,7 @@ func TestSuccessExamples(t *testing.T) {
 			t.Fatalf("Error reading test file %s: %v", rule, err)
 		}
 
-		_, err = Parse(testData)
+		_, err = Parse(testData, opts...)
 		if err != nil {
 			t.Fatalf("Error parsing rule %s: %v", rule, err)
 		}
@@ -111,6 +115,8 @@ func TestSuccessExamples(t *testing.T) {
 }
 
 func TestParseFail(t *testing.T) {
+
+	var opts = []ParseOptT{WithGenIds()}
 
 	var tests = map[string]struct {
 		rule string
@@ -200,7 +206,7 @@ func TestParseFail(t *testing.T) {
 
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			_, err := Parse([]byte(test.rule))
+			_, err := Parse([]byte(test.rule), opts...)
 			if err == nil {
 				t.Fatalf("Expected error parsing rule")
 			}
