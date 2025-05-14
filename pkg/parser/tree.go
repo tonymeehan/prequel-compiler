@@ -2,6 +2,8 @@ package parser
 
 import (
 	"crypto/sha1"
+	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -665,6 +667,18 @@ func Hash(h string) string {
 	return base58.Encode(hash[:])
 }
 
+func HashRule(data any) (string, error) {
+	// json.Marshal to produce deterministic output
+	jsonBytes, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	hash := sha256.Sum256(jsonBytes)
+
+	return base58.Encode(hash[:]), nil
+}
+
 func parseRules(rules []ParseRuleT, termsT map[string]ParseTermT, rulesRoot *yaml.Node, termsY map[string]*yaml.Node, opts ...ParseOptT) (*TreeT, error) {
 
 	var (
@@ -698,12 +712,14 @@ func parseRules(rules []ParseRuleT, termsT map[string]ParseTermT, rulesRoot *yam
 					Msg("Rule id is empty, generating from cre id")
 			}
 			if rule.Metadata.Hash == "" {
-				rule.Metadata.Hash = Hash(rule.Cre.Id + rule.Metadata.Id)
+				if rule.Metadata.Hash, err = HashRule(rule); err != nil {
+					return nil, err
+				}
 				log.Warn().
 					Str("rule.Cre.Id", rule.Cre.Id).
 					Str("rule.Metadata.Id", rule.Metadata.Id).
 					Str("rule.Metadata.Hash", rule.Metadata.Hash).
-					Msg("Rule hash is empty, generating from cre id and rule id")
+					Msg("Rule hash is empty, generating from rule data")
 			}
 		}
 
