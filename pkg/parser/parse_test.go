@@ -60,6 +60,16 @@ func TestParseSuccess(t *testing.T) {
 			expectedNodeTypes:  []string{"machine_seq", "log_seq", "log_set", "machine_seq", "log_seq", "log_set", "log_set"},
 			expectedNegIndexes: []int{-1, 2, 2, -1, -1, -1, -1},
 		},
+		"Success_MissingRuleId": {
+                        rule: testdata.TestFailMissingRuleIdRule,
+			expectedNodeTypes:  []string{"log_set"},
+			expectedNegIndexes: []int{-1},
+                },
+                "Success_MissingRuleHash": {
+                        rule: testdata.TestFailMissingRuleHashRule,
+			expectedNodeTypes:  []string{"log_set"},
+			expectedNegIndexes: []int{-1},
+                },
 	}
 
 	for name, test := range tests {
@@ -116,7 +126,7 @@ func TestSuccessExamples(t *testing.T) {
 
 func TestParseFail(t *testing.T) {
 
-	var opts = []ParseOptT{WithGenIds()}
+	var opts = []ParseOptT{}
 
 	var tests = map[string]struct {
 		rule string
